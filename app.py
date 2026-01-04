@@ -7,7 +7,7 @@ import os
 import base64
 from typing import Dict, Any
 
-# Configuration
+# Configuration - FIXED FOR HUGGING FACE DEPLOYMENT
 BJJ_BACKEND_URL = os.getenv("BJJ_BACKEND_URL", "https://samiee2213-bjj-ai-demo.hf.space")
 
 # Page configuration
@@ -227,19 +227,32 @@ st.markdown("""
         border-radius: 10px;
         margin: 20px 0;
     }
+    
+    .connection-status {
+        background: #1a1a1a;
+        border-radius: 10px;
+        padding: 15px;
+        margin: 10px 0;
+        border-left: 4px solid #667eea;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 def check_backend_health(url: str) -> tuple[bool, str]:
+    """Check if backend is online and get version"""
     try:
-        response = requests.get(f"{url}/", timeout=3)
+        response = requests.get(f"{url}/health", timeout=10)
         if response.status_code == 200:
             data = response.json()
             version = data.get("version", "Unknown")
-            return True, f"Online v{version} ✅"
+            return True, f"v{version} ✅"
         return False, f"Status {response.status_code} ❌"
+    except requests.exceptions.Timeout:
+        return False, "Timeout (>10s) ⏱️"
+    except requests.exceptions.ConnectionError:
+        return False, "Connection refused 🔌"
     except Exception as e:
-        return False, f"Offline ❌ ({str(e)[:30]})"
+        return False, f"Error: {str(e)[:50]}"
 
 def render_overall_performance(result: Dict[str, Any]):
     """Render the overall performance card matching client UI"""
@@ -363,19 +376,16 @@ def render_opportunities(opportunities: list):
                 </div>
             </div>
         """, unsafe_allow_html=True)
-         # ✅ DEBUG LINE GOES HERE
-        st.write("Has frame:", bool(opp.get("frame_image")))
 
-        # ✅ MOVE IMAGE INSIDE LOOP
         if opp.get("frame_image"):
-            st.image(
-                base64.b64decode(opp["frame_image"]),
-                caption=f"Frame @ {timestamp}",
-                use_container_width=True
-            )
-
-
-
+            try:
+                st.image(
+                    base64.b64decode(opp["frame_image"]),
+                    caption=f"Frame @ {timestamp}",
+                    use_container_width=True
+                )
+            except:
+                pass
 
 def render_key_moments(moments: list):
     if not moments:
@@ -399,20 +409,16 @@ def render_key_moments(moments: list):
                     </div>
                 </div>
             """, unsafe_allow_html=True)
-             # ✅ DEBUG LINE GOES HERE
-            st.write("Has frame:", bool(moment.get("frame_image")))
 
-            # ✅ IMAGE MUST BE INSIDE EXPANDER + LOOP
             if moment.get("frame_image"):
-                st.image(
-                    base64.b64decode(moment["frame_image"]),
-                    caption=f"Frame @ {timestamp}",
-                    use_container_width=True
-                )
-
-
-
-
+                try:
+                    st.image(
+                        base64.b64decode(moment["frame_image"]),
+                        caption=f"Frame @ {timestamp}",
+                        use_container_width=True
+                    )
+                except:
+                    pass
 
 def render_coach_notes(notes: str):
     """Render coach's insights section"""
@@ -487,7 +493,7 @@ def display_analysis_results(results: Dict[str, Any]):
     if not data:
         data = results
     
-    # Processing time (Display from result or added by client)
+    # Processing time
     if "processing_time" in results:
         st.caption(f"⚡ Analysis completed in {results['processing_time']}")
     
@@ -533,8 +539,7 @@ def display_analysis_results(results: Dict[str, Any]):
         render_recommended_drills(data["recommended_drills"])
 
 def main():
-
-    # ---- Session guards (CRITICAL) ----
+    # Session guards
     if "analysis_running" not in st.session_state:
         st.session_state.analysis_running = False
 
@@ -544,17 +549,30 @@ def main():
     st.markdown('<h1 class="main-title">🥋 BJJ AI COACH</h1>', unsafe_allow_html=True)
     st.markdown('<p class="subtitle">Advanced Performance Analysis Powered by AI</p>', unsafe_allow_html=True)
     
-    # Backend Status
-    online, status_msg = check_backend_health(BJJ_BACKEND_URL)
+    # Backend Status with better UI
+    with st.spinner("Checking backend connection..."):
+        online, status_msg = check_backend_health(BJJ_BACKEND_URL)
     
     if not online:
-        st.error(f"⚠️ Backend Connection Failed: {status_msg}")
-        st.code("uvicorn main:app --host 0.0.0.0 --port 8000 --reload", language="bash")
+        st.error("⚠️ Backend Connection Failed")
+        st.markdown(f"""
+            <div class="connection-status">
+                <div style="color: #ff6a00; font-weight: 700; margin-bottom: 10px;">
+                    Status: {status_msg}
+                </div>
+                <div style="color: #aaa; font-size: 0.9rem;">
+                    Backend URL: <code>{BJJ_BACKEND_URL}</code>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
         if st.button("🔄 Retry Connection"):
             st.rerun()
+        
+        st.info("💡 **Troubleshooting:**\n- Check if the backend is deployed\n- Verify the URL is correct\n- Check Hugging Face Space logs")
         return
     else:
-        st.success(f"✅ System Status: {status_msg}")
+        st.success(f"✅ Backend Online: {status_msg}")
     
     st.markdown("---")
     
@@ -576,12 +594,12 @@ def main():
         st.markdown("### ⚙️ MATCH CONFIGURATION")
         user_desc = st.text_input(
             "👤 Your Description",
-            value="Player with dark brown hair",
-            help="Describe yourself (gi color, appearance, etc.)"
+            value="Player with dreadlocks",
+            help="Describe yourself (hair, gi color, appearance)"
         )
         opp_desc = st.text_input(
             "🥊 Opponent Description",
-            value="Player with blonde hair",
+            value="Player with short hair",
             help="Describe your opponent"
         )
         activity = st.selectbox(
@@ -598,7 +616,8 @@ def main():
             analyze_button = st.button(
                 "🚀 START ANALYSIS",
                 type="primary",
-                use_container_width=True
+                use_container_width=True,
+                disabled=st.session_state.analysis_running
             )
         
         if analyze_button and not st.session_state.analysis_running:
@@ -611,12 +630,11 @@ def main():
                 status_text = st.empty()
                 
                 try:
-                    # Upload phase
-                    status_text.markdown("**📤 Uploading video to server...**")
+                    status_text.markdown("**📤 Uploading video...**")
                     progress_bar.progress(10)
                     time.sleep(0.3)
                     
-                    status_text.markdown("**🎬 Extracting key frames...**")
+                    status_text.markdown("**🎬 Extracting smart weighted frames...**")
                     progress_bar.progress(25)
                     
                     # Prepare request
@@ -629,7 +647,7 @@ def main():
                         "activity_type": activity
                     }
                     
-                    status_text.markdown("**🤖 AI analyzing technique...**")
+                    status_text.markdown("**🤖 AI analyzing footage (submission detection enabled)...**")
                     progress_bar.progress(40)
                     
                     # Start timer
@@ -640,7 +658,7 @@ def main():
                         f"{BJJ_BACKEND_URL}/analyze-complete",
                         files=files,
                         data=data,
-                        timeout=180  # 3 minutes max
+                        timeout=180
                     )
                     
                     # End timer
@@ -661,19 +679,14 @@ def main():
                             progress_bar.empty()
                             status_text.empty()
                             
-                            # Add client-side timing if not present
+                            # Add timing
                             if "processing_time" not in result:
                                 result["processing_time"] = processing_duration
-                            else:
-                                # Show both if available, or stick to backend time. 
-                                # Here we append client time to the existing string for clarity
-                                result["processing_time"] = f"{result['processing_time']} (Total: {processing_duration})"
                             
                             st.markdown("---")
                             
-                            # Display Results
+                            # Store result
                             st.session_state.analysis_result = result
-
                             
                             # Download Button
                             st.markdown("<br><br>", unsafe_allow_html=True)
@@ -692,63 +705,70 @@ def main():
                             st.error(f"❌ Analysis failed: {result.get('error', 'Unknown error')}")
                     
                     else:
-                        st.error(f"❌ Server returned error {response.status_code}")
-                        st.code(response.text[:500])
+                        st.error(f"❌ Server error {response.status_code}")
+                        with st.expander("Show error details"):
+                            st.code(response.text)
                 
                 except requests.exceptions.Timeout:
-                    st.error("⏱️ Request timed out. Video may be too long. Try a shorter clip.")
+                    st.error("⏱️ Request timed out (>3 min). Try a shorter video clip.")
                 except requests.exceptions.ConnectionError:
-                    st.error("🔌 Connection error. Ensure the backend is running.")
+                    st.error("🔌 Connection error. Backend may be down.")
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")
                 finally:
                     st.session_state.analysis_running = False
                     progress_bar.empty()
                     status_text.empty()
-    # ===============================
-    # DISPLAY RESULT (SAFE LOCATION)
-    # ===============================
+    
+    # Display result
     if st.session_state.analysis_result:
         st.markdown("---")
         display_analysis_results(st.session_state.analysis_result)
-
     
     # Sidebar
     with st.sidebar:
         st.markdown("### ⚙️ SYSTEM INFO")
-        st.info(f"Backend: `{BJJ_BACKEND_URL}`")
+        st.markdown(f"""
+            <div class="connection-status">
+                <div style="color: #aaa; font-size: 0.85rem; margin-bottom: 5px;">Backend:</div>
+                <div style="color: #667eea; font-size: 0.9rem; word-break: break-all;">
+                    {BJJ_BACKEND_URL}
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
         
         st.markdown("---")
         st.markdown("### 📖 HOW IT WORKS")
         st.markdown("""
-        1. **Upload** your sparring video
+        1. **Upload** your sparring video (15-90s)
         2. **Describe** who's who clearly
-        3. **Wait** 15-45s for AI processing
-        4. **Review** detailed tactical analysis
-        5. **Download** JSON for record-keeping
+        3. **Wait** 30-50s for AI analysis
+        4. **Review** detailed performance breakdown
+        5. **Download** JSON for records
         """)
         
         st.markdown("---")
-        st.markdown("### 💡 TIPS FOR BEST RESULTS")
+        st.markdown("### 💡 BEST PRACTICES")
         st.markdown("""
-        - Use **good lighting**
-        - **Side angle** camera view preferred
-        - Keep both athletes **in frame**
-        - **15-60 second** clips work best
-        - Clearly distinguish athletes (gi color/appearance)
+        - ✅ Good lighting
+        - ✅ Side angle camera
+        - ✅ Both athletes in frame
+        - ✅ Clear athlete distinctions
+        - ✅ 15-60 second clips ideal
         """)
         
         st.markdown("---")
-        st.markdown("### 🔧 TECHNICAL SPECS")
+        st.markdown("### 🎯 FEATURES")
         st.markdown("""
-        - **Model**: Gemini 2.5 Flash
-        - **Frame Analysis**: 8-24 frames
-        - **Retry System**: 3 attempts with fallback
-        - **Accuracy**: Position detection, submissions
+        - **Smart Frame Extraction**: 40% from ending
+        - **Submission Detection**: Tap recognition
+        - **Weighted Scoring**: Outcome-based
+        - **Frame Attachments**: Visual evidence
         """)
         
         st.markdown("---")
         st.caption("Built with ❤️ for the BJJ community")
+        st.caption(f"Backend: Hugging Face Space")
 
 if __name__ == "__main__":
     main()
