@@ -8,7 +8,7 @@ import base64
 from typing import Dict, Any
 
 # Configuration
-BJJ_BACKEND_URL = os.getenv("BJJ_BACKEND_URL", "https://sam22ridhi-bjj-ai-backend.hf.space")
+BJJ_BACKEND_URL = os.getenv("BJJ_BACKEND_URL", "https://samiee2213-bjj-ai-demo.hf.space")
 
 # Page configuration
 st.set_page_config(
