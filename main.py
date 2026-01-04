@@ -17,7 +17,7 @@ import cv2
 import numpy as np
 
 # Configuration
-GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY", "AIzaSyDWfJUOLvDjcIuwEONKysC2c78ojlR_zPM")
+GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
 genai.configure(api_key=GEMINI_API_KEY)
 
 app = FastAPI(title="BJJ AI Coach - Smart Frame Extraction")
@@ -818,4 +818,5 @@ async def root():
             "✅ Outcome-based scoring adjustments"
         ],
         "target_time": "30-45 seconds"
+
     }
